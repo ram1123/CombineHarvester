@@ -87,7 +87,7 @@ class CombineToolBase:
 
     def attach_job_args(self, group):
         group.add_argument('--job-mode', default=self.job_mode, choices=[
-                           'interactive', 'script', 'lxbatch', 'SGE', 'crab3'], help='Task execution mode')
+                           'interactive', 'script', 'lxbatch', 'SGE', 'crab3', 'psi'], help='Task execution mode')
         group.add_argument('--prefix-file', default=self.prefix_file,
                            help='Path to file containing job prefix')
         group.add_argument('--task-name', default=self.task_name,
@@ -185,7 +185,7 @@ class CombineToolBase:
             result = pool.map(
                 partial(run_command, self.dry_run), self.job_queue)
         script_list = []
-        if self.job_mode in ['script', 'lxbatch', 'SGE']:
+        if self.job_mode in ['script', 'lxbatch', 'SGE', 'psi']:
             if self.prefix_file != '':
                 if self.prefix_file.endswith('.txt'):
                   job_prefix_file = open(self.prefix_file,'r')
@@ -206,6 +206,23 @@ class CombineToolBase:
                 self.create_job_script(
                     self.job_queue[j:j + self.merge], script_name, self.job_mode == 'script')
                 script_list.append(script_name)
+        if self.job_mode == 'psi':
+            for script in script_list:
+                full_script = os.path.abspath(script)
+                # PSI needs some extra lines (probably this can be done with a prefix file)
+                with open( full_script, 'r' ) as shFp:
+                    shText = shFp.read()
+                shText = (
+                    '#$ -o {0}/\n'.format( os.path.dirname(full_script) ) +
+                    '#$ -e {0}/\n'.format( os.path.dirname(full_script) ) +
+                    'export VO_CMS_SW_DIR=/cvmfs/cms.cern.ch/\n' +
+                    'source /cvmfs/cms.cern.ch/cmsset_default.sh\n' +
+                    'source /swshare/psit3/etc/profile.d/cms_ui_env.sh\n' +
+                    shText
+                    )
+                with open( full_script, 'w' ) as shFp:
+                    shFp.write( shText )
+                run_command(self.dry_run, 'qsub %s %s' % (self.bopts, full_script))
         if self.job_mode == 'lxbatch':
             for script in script_list:
                 full_script = os.path.abspath(script)
