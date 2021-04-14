@@ -274,7 +274,12 @@ class CombineHarvester {
   void ForEachSyst(Function func);
 
   void VariableRebin(std::vector<double> bins);
+  void ZeroBins(double min, double max);
   void SetPdfBins(unsigned nbins);
+
+  // 
+  double getParFromWs(const std::string name);
+  void setParInWs(const std::string name,double value) ;
 
   /**
    * Add parameters to a given group
@@ -306,6 +311,18 @@ class CombineHarvester {
    * @param newname The new name
    */
   void RenameGroup(std::string const& oldname, std::string const& newname);
+
+  /**
+   * Add a line of text at the end of all datacards
+   *
+   * @param line Line of text to add
+   */
+  void AddDatacardLineAtEnd(std::string const& line);
+
+  /**
+   * Clear all added datacard lines
+   */
+  void ClearDatacardLinesAtEnd();
   /**@}*/
 
   /**
@@ -446,6 +463,11 @@ class CombineHarvester {
   void MergeBinErrors(double bbb_threshold, double merge_threshold);
   /**@}*/
 
+  void SetAutoMCStats(CombineHarvester &target, double thresh, bool sig=false, int mode=1);
+  void RenameAutoMCStatsBin(std::string const& oldname, std::string const& newname);
+  std::set<std::string> GetAutoMCStatsBins() const;
+
+  void AddExtArgValue(std::string const& name, double const& value);
  private:
   friend void swap(CombineHarvester& first, CombineHarvester& second);
 
@@ -459,6 +481,23 @@ class CombineHarvester {
   std::map<std::string, std::shared_ptr<RooWorkspace>> wspaces_;
 
   std::unordered_map<std::string, bool> flags_;
+
+  struct AutoMCStatsSettings {
+    double event_threshold;
+    bool include_signal;
+    int hist_mode;
+
+    AutoMCStatsSettings(double thresh, bool sig=false, int mode=1) {
+      event_threshold = thresh;
+      include_signal = sig;
+      hist_mode = mode;
+    }
+
+    AutoMCStatsSettings() : AutoMCStatsSettings(0.) {}
+  };
+
+  std::map<std::string, AutoMCStatsSettings> auto_stats_settings_;
+  std::vector<std::string> post_lines_;
 
   // ---------------------------------------------------------------
   // typedefs
@@ -500,10 +539,10 @@ class CombineHarvester {
 
   RooAbsData const* FindMatchingData(Process const* proc);
 
-  ch::Parameter * SetupRateParamVar(std::string const& name, double val);
+  ch::Parameter * SetupRateParamVar(std::string const& name, double val, bool is_ext_arg = false);
   void SetupRateParamFunc(std::string const& name, std::string const& formula,
                           std::string const& pars);
-
+  void SetupRateParamWspObj(std::string const& name, std::string const& obj, bool is_ext_arg = false);
   // ---------------------------------------------------------------
   // Private methods for the shape writing routines
   // ---------------------------------------------------------------
@@ -647,7 +686,7 @@ void CombineHarvester::AddSyst(CombineHarvester& target,
   // Systematic.
   auto tuples = valmap.GetTupleSet();
   if (verbosity_ >= 1) {
-    LOGLINE(log(), name + ":" + type);
+    log() << (name + ":" + type) << "\n";
   }
   for (unsigned i = 0; i < procs_.size(); ++i) {
     if (!valmap.Contains(procs_[i].get())) {
